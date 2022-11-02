@@ -1,0 +1,136 @@
+{
+	"definition": {
+		"$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+		"actions": {
+			"Call_an_Azure_function": {
+				"inputs": {
+					"body": "@triggerBody()",
+					"function": {
+						"connectionName": "azureFunctionOperation"
+					},
+					"method": "POST"
+				},
+				"runAfter": {},
+				"type": "Function"
+			},
+			"Condition": {
+				"actions": {
+					"Response": {
+						"inputs": {
+							"body": "Done",
+							"statusCode": 200
+						},
+						"kind": "http",
+						"runAfter": {
+							"Scope_-_Parse_Response": [
+								"Succeeded"
+							]
+						},
+						"type": "Response"
+					},
+					"Scope_-_Parse_Response": {
+						"actions": {
+							"For_each": {
+								"actions": {
+									"Upload_blob_to_storage_container": {
+										"inputs": {
+											"parameters": {
+												"blobName": "@items('For_each')['name']",
+												"containerName": "csvs",
+												"content": "@items('For_each')['content']"
+											},
+											"serviceProviderConfiguration": {
+												"connectionName": "AzureBlob",
+												"operationId": "uploadBlob",
+												"serviceProviderId": "/serviceProviders/AzureBlob"
+											}
+										},
+										"runAfter": {},
+										"type": "ServiceProvider"
+									}
+								},
+								"foreach": "@body('Parse_JSON')",
+								"runAfter": {
+									"Parse_JSON": [
+										"Succeeded"
+									]
+								},
+								"type": "Foreach"
+							},
+							"Parse_JSON": {
+								"inputs": {
+									"content": "@body('Call_an_Azure_function')",
+									"schema": {
+										"items": {
+											"properties": {
+												"content": {
+													"type": "string"
+												},
+												"name": {
+													"type": "string"
+												}
+											},
+											"required": [
+												"name",
+												"content"
+											],
+											"type": "object"
+										},
+										"type": "array"
+									}
+								},
+								"runAfter": {},
+								"type": "ParseJson"
+							}
+						},
+						"runAfter": {},
+						"type": "Scope"
+					}
+				},
+				"else": {
+					"actions": {
+						"Terminate": {
+							"inputs": {
+								"runError": {
+									"code": "@{outputs('Call_an_Azure_function')?['statusCode']}",
+									"message": "Error occured"
+								},
+								"runStatus": "Failed"
+							},
+							"runAfter": {},
+							"type": "Terminate"
+						}
+					}
+				},
+				"expression": {
+					"and": [
+						{
+							"equals": [
+								"@outputs('Call_an_Azure_function')?['statusCode']",
+								200
+							]
+						}
+					]
+				},
+				"runAfter": {
+					"Call_an_Azure_function": [
+						"Succeeded"
+					]
+				},
+				"type": "If"
+			}
+		},
+		"contentVersion": "1.0.0.0",
+		"outputs": {},
+		"triggers": {
+			"manual": {
+				"inputs": {
+					"method": "POST"
+				},
+				"kind": "Http",
+				"type": "Request"
+			}
+		}
+	},
+	"kind": "Stateless"
+}
